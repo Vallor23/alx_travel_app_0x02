@@ -32,7 +32,7 @@ class InitiatePaymentView(View):
             "currency": "ETB",
             "email":email,
             "first_name":full_name.split()[0],
-            "last_name": full_name.split()[-1] if len(full_name.split()) > 1 else " ",
+            "last_name": full_name.split()[-1] if len(full_name.split()) > 1 else "",
             "txt_ref": txt_ref,
             "callback_url": "https://yourdomain.com/chapa/callback/",  # optional
             "return_url": "https://yourdomain.com/payment-success/",
