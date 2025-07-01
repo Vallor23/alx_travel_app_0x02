@@ -58,7 +58,7 @@ class Payment(models.Model):
 
         booking_id = models.ForeignKey(Booking, on_delete=models.CASCADE, related_name='payments')
         email = models.EmailField(default='noemail@example.com')
-        full_name = models.CharField(max_length=255)
+        full_name = models.CharField(max_length=255, null=True, blank=True)
         payment_status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='PENDING')
         amount = models.DecimalField(max_digits=10, decimal_places=2)
         transaction_id = models.CharField(max_length=100, unique=True)
