@@ -1,11 +1,15 @@
 import uuid
+from environ import Env
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from django.http import JsonResponse
 from .models import Payment
 from django.views import View
-import os
+from .models import Booking
 import requests
+
+env=Env()
+env.read_env()
 
 @method_decorator(csrf_exempt, name='dispatch')  # To ensure all HTTP methods skip CSRF checks
 class InitiatePaymentView(View):
@@ -19,11 +23,17 @@ class InitiatePaymentView(View):
         full_name = data.get('amount')
         booking_id = data.get('booking_id')
 
+        # link to an existing Booking object
+        try:
+            booking = Booking.objects.get(id=booking_id)
+        except Booking.DoesNotExist:
+            return JsonResponse({"error": "Booking not found"}, status=404)
+
         if not all([email, amount, full_name, booking_id]):
             return JsonResponse({'error': 'Missing required fields'}, status=400)
 
         # Prepare data for Chapa API
-        CHAPA_SECRET_KEY=os.environ('CHAPA_SECRET_KEY')
+        CHAPA_SECRET_KEY=env('CHAPA_SECRET_KEY')
         CHAPA_API_URL = "https://api.chapa.co/v1/transaction/initialize"
         txt_ref= str(uuid.uuid4())  # generating a unique transaction reference for the payment request
 
@@ -34,7 +44,7 @@ class InitiatePaymentView(View):
             "first_name":full_name.split()[0],
             "last_name": full_name.split()[-1] if len(full_name.split()) > 1 else "",
             "txt_ref": txt_ref,
-            "callback_url": "https://yourdomain.com/chapa/callback/",  # optional
+            "callback_url": "https://8804-41-90-172-227.ngrok-free.app/chapa/callback/",  # optional
             "return_url": "https://yourdomain.com/payment-success/",
             "customization": {
                 "title": "Booking Payment",
@@ -49,11 +59,11 @@ class InitiatePaymentView(View):
 
         response = requests.post(CHAPA_API_URL, json=chapa_payload, headers=headers)  # Sends a payment initiation request to Chapa
         chapa_response= response.json()
-
+        print(chapa_response)
         if chapa_response.get('status') == 'success':
             # Save payment
             Payment.objects.create(
-                booking_id= booking_id,
+                booking_id= booking,
                 email= email,
                 full_name= full_name,
                 amount= amount,
@@ -69,11 +79,14 @@ class InitiatePaymentView(View):
             })
         else:
             return JsonResponse({'error': 'Chapa payment initiation failed'}, status=500)
-
+        
+@csrf_exempt
 def verify_payment(request, tx_ref):
-    url = f"https://api.chapa.co/v1/transaction/verify/<tx_ref>"
+
+    CHAPA_SECRET_KEY=env('CHAPA_SECRET_KEY')
+    url = f"https://api.chapa.co/v1/transaction/verify/{tx_ref}"
     headers = {
-        'Authorization': 'Bearer {CHAPA_SECRET_KEY}'
+        'Authorization': f"Bearer {CHAPA_SECRET_KEY}"
     }
 
     #  Make a GET request to Chapa's Verify API
