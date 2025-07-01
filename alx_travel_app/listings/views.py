@@ -69,3 +69,30 @@ class InitiatePaymentView(View):
             })
         else:
             return JsonResponse({'error': 'Chapa payment initiation failed'}, status=500)
+
+def verify_payment(request, tx_ref):
+    url = f"https://api.chapa.co/v1/transaction/verify/<tx_ref>"
+    headers = {
+        'Authorization': 'Bearer {CHAPA_SECRET_KEY}'
+    }
+
+    #  Make a GET request to Chapa's Verify API
+    response = requests.get(url, headers=headers)
+    results = response.json()
+
+    try:
+        payment = Payment.objects.get(transaction_id=tx_ref)
+    except Payment.DoesNotExist:
+        return JsonResponse({'error':'Payment record not found in your database.'}, status=404)
+    
+    # Process Chapa's verification response
+    if results.get('status') == "success" and results['data']['status'] == "success":
+        # payment was successful!
+        payment.status = 'SUCCESS'
+        payment.save()
+        return JsonResponse({'Message': 'Payment verified successfully'})
+    else:
+        # Verification failed!
+        payment.status = 'FAILED'
+        payment.save()
+        return JsonResponse({'Message': 'Payment verification failed'}, status=404)
