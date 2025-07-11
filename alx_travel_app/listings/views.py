@@ -1,12 +1,16 @@
 import uuid
 from environ import Env
+from rest_framework import viewsets, status
+from rest_framework.response import Response
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from django.http import JsonResponse
 from .models import Payment
 from django.views import View
 from .models import Booking
+from .serializers import BookingSerializer
 import requests
+from listings.tasks import send_listing_email
 
 env=Env()
 env.read_env()
@@ -92,6 +96,7 @@ def verify_payment(request, tx_ref):
     #  Make a GET request to Chapa's Verify API
     response = requests.get(url, headers=headers)
     results = response.json()
+    print(results)
 
     try:
         payment = Payment.objects.get(transaction_id=tx_ref)
@@ -109,3 +114,20 @@ def verify_payment(request, tx_ref):
         payment.status = 'FAILED'
         payment.save()
         return JsonResponse({'Message': 'Payment verification failed'}, status=404)
+
+
+
+class BookingViewSet(viewsets.ModelViewSet):
+    queryset = Booking.objects.all()
+    serializer_class = BookingSerializer
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        booking = serializer.save()
+
+        # Trigger Celery emailtask
+        send_listing_email.delay(booking.listing.id)
+
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
